@@ -1,0 +1,40 @@
+[project]
+name = "resumeguard-ai"
+version = "1.0.0"
+requires-python = ">=3.11"
+description = "ResumeGuard AI — Red/Blue prompt-injection lab"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["server/app", "tests", "harness"]
+extend-exclude = [
+  ".venv",
+  "node_modules",
+  "dist",
+  "client",
+  "server/data",
+  "server/src",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+  "B",
+  "UP",
+  "W",
+]
+ignore = [
+  "E501",
+  "B008",  # FastAPI Depends/File/Form defaults
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+"harness/*" = ["T201"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

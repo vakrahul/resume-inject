@@ -1,0 +1,12 @@
+services:
+  resumeguard:
+    build: .
+    ports:
+      - "3010:3010"
+    env_file:
+      - .env
+    environment:
+      - PORT=3010
+      - MAIL_DRY_RUN=${MAIL_DRY_RUN:-true}
+    volumes:
+      - ./server/data:/app/server/data

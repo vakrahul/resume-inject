@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+set -e
+
+echo "→ Husky pre-commit: ruff check"
+if command -v ruff >/dev/null 2>&1; then
+  ruff check server/app tests harness
+elif command -v python >/dev/null 2>&1; then
+  python -m ruff check server/app tests harness
+else
+  echo "ruff not found — install with: pip install ruff"
+  exit 1
+fi
+
+echo "→ Husky pre-commit: block .env secrets"
+if git diff --cached --name-only | grep -E '(^|/)\.env$' >/dev/null 2>&1; then
+  echo "ERROR: .env must not be committed. Unstage it."
+  exit 1
+fi
+if git diff --cached --name-only | grep -E '(^|/)\.env\.' | grep -v '\.env\.example$' >/dev/null 2>&1; then
+  echo "ERROR: secret .env.* files must not be committed (only .env.example is allowed)."
+  exit 1
+fi
+
+echo "→ Husky pre-commit: npm test"
+MAIL_DRY_RUN=true npm test
