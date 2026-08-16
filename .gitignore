@@ -41,3 +41,4 @@ Thumbs.db
 
 # Husky local
 .husky/_
+.vercel
