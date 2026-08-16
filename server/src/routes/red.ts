@@ -1,20 +1,22 @@
 import { Router } from "express";
 import multer from "multer";
-import path from "node:path";
-import fs from "node:fs/promises";
 import { samplePatterns } from "../catalog/index.js";
 import { injectPayloads, buildResumePdf } from "../pdf/inject.js";
 import { extractText, highlightInjections } from "../pdf/extract.js";
 import { runNaiveGeminiSafe } from "../agents/naiveGemini.js";
 import {
-  UPLOADS_DIR,
   createRun,
   getRun,
   updateRun,
   hashBytes,
   pushEvent,
+  storePdf,
+  loadPdf,
+  pdfKeyOriginal,
+  pdfKeyPoisoned,
 } from "../store/runs.js";
 
+// Memory storage — no disk writes, works on Vercel serverless
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 export const redRouter = Router();
@@ -89,14 +91,9 @@ redRouter.post("/inject", upload.single("resume"), async (req, res, next) => {
       timeline: [{ at: new Date().toISOString(), event: "injected", detail: { count: injected.length } }],
     });
 
-    const originalPath = path.join(UPLOADS_DIR, `${run.id}-original.pdf`);
-    const poisonedPath = path.join(UPLOADS_DIR, `${run.id}-poisoned.pdf`);
-    await fs.writeFile(originalPath, sourcePdf);
-    await fs.writeFile(poisonedPath, pdfBytes);
-    await updateRun(run.id, (r) => {
-      r.originalPdfPath = originalPath;
-      r.poisonedPdfPath = poisonedPath;
-    });
+    // Store PDFs in-memory instead of writing to disk
+    storePdf(pdfKeyOriginal(run.id), Buffer.from(sourcePdf));
+    storePdf(pdfKeyPoisoned(run.id), Buffer.from(pdfBytes));
 
     res.json({
       run_id: run.id,
@@ -109,7 +106,7 @@ redRouter.post("/inject", upload.single("resume"), async (req, res, next) => {
       })),
       extractedText: extracted.text,
       highlights,
-      poisonedPdfUrl: `/files/${run.id}-poisoned.pdf`,
+      poisonedPdfUrl: `/api/files/${run.id}-poisoned.pdf`,
     });
   } catch (err) {
     next(err);
@@ -129,7 +126,12 @@ redRouter.post("/attack", async (req, res, next) => {
       return;
     }
 
-    const pdf = await fs.readFile(run.poisonedPdfPath);
+    // Load PDF from in-memory store
+    const pdf = loadPdf(pdfKeyPoisoned(runId));
+    if (!pdf) {
+      res.status(404).json({ error: "PDF not found — run may have expired (serverless ephemeral memory)" });
+      return;
+    }
     const extracted = await extractText(pdf);
     const agent = await runNaiveGeminiSafe(extracted.text);
 

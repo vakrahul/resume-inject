@@ -1,13 +1,20 @@
 import { Router } from "express";
-import path from "node:path";
-import fs from "node:fs/promises";
 import { extractText, highlightInjections } from "../pdf/extract.js";
 import { sanitizeResumeText } from "../pdf/sanitize.js";
 import { wrapUntrusted } from "../defense/delimiters.js";
 import { detectInjectionSignals } from "../defense/detectors.js";
 import { runSecureGemini } from "../agents/secureGemini.js";
 import { buildCleanedResumePdf } from "../pdf/inject.js";
-import { getRun, updateRun, pushEvent, UPLOADS_DIR } from "../store/runs.js";
+import {
+  getRun,
+  updateRun,
+  pushEvent,
+  storePdf,
+  loadPdf,
+  pdfKeyPoisoned,
+  pdfKeyCleaned,
+  pdfKeyOriginal,
+} from "../store/runs.js";
 
 export const blueRouter = Router();
 
@@ -24,7 +31,13 @@ blueRouter.post("/defend", async (req, res, next) => {
       return;
     }
 
-    const pdf = await fs.readFile(run.poisonedPdfPath);
+    // Load PDF from in-memory store
+    const pdf = loadPdf(pdfKeyPoisoned(runId));
+    if (!pdf) {
+      res.status(404).json({ error: "PDF not found — run may have expired (serverless ephemeral memory)" });
+      return;
+    }
+
     const extracted = await extractText(pdf);
     const sanitize = sanitizeResumeText(extracted.text);
     const detections = detectInjectionSignals(extracted.text);
@@ -45,15 +58,14 @@ blueRouter.post("/defend", async (req, res, next) => {
       if (probe.alert) agent.alerts.push(probe.alert);
     }
 
-    // Write a clean PDF (injections stripped) for download — Red keeps the poisoned file.
+    // Build a clean PDF (injections stripped) and store in-memory
     const cleanedBytes = await buildCleanedResumePdf(sanitize.cleanedText);
-    const cleanedPdfPath = path.join(UPLOADS_DIR, `${runId}-cleaned.pdf`);
-    await fs.writeFile(cleanedPdfPath, cleanedBytes);
+    storePdf(pdfKeyCleaned(runId), Buffer.from(cleanedBytes));
 
-    const originalPdfUrl = run.originalPdfPath
-      ? `/files/${path.basename(run.originalPdfPath)}`
+    const cleanPdfUrl = `/api/files/${runId}-cleaned.pdf`;
+    const originalPdfUrl = loadPdf(pdfKeyOriginal(runId))
+      ? `/api/files/${runId}-original.pdf`
       : undefined;
-    const cleanPdfUrl = `/files/${runId}-cleaned.pdf`;
 
     const updated = await updateRun(runId, (r) => {
       r.extractedText = extracted.text;
@@ -65,7 +77,6 @@ blueRouter.post("/defend", async (req, res, next) => {
         delimitedPreview: delimited.slice(0, 2000),
         agent,
         alerts: agent.alerts,
-        cleanedPdfPath,
         cleanPdfUrl,
         originalPdfUrl,
       };

@@ -22,7 +22,8 @@ export async function injectPayloads(
 
   const neededPages = Math.max(1, Math.ceil(options.payloads.length / 25));
   while (pages.length < neededPages) {
-    doc.addPage(pages[0]?.getSize() ?? { width: 612, height: 792 });
+    const sz = pages[0]?.getSize();
+    doc.addPage(sz ? [sz.width, sz.height] : [612, 792]);
     pages = doc.getPages();
   }
 

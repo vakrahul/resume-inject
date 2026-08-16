@@ -1,14 +1,11 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { v4 as uuid } from "uuid";
 import type { SecurityAlert } from "../mail/interceptor.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const DATA_DIR = path.join(__dirname, "../../data");
-export const RUNS_DIR = path.join(DATA_DIR, "runs");
-export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+// ---------------------------------------------------------------------------
+// In-memory store — replaces file-based JSON/PDF storage so this works on
+// serverless environments (Vercel) where there is no persistent filesystem.
+// ---------------------------------------------------------------------------
 
 export interface RunRecord {
   id: string;
@@ -37,18 +34,46 @@ export interface RunRecord {
   timeline: Array<{ at: string; event: string; detail?: unknown }>;
 }
 
+// In-memory stores
+const runStore = new Map<string, RunRecord>();
+const pdfStore = new Map<string, Buffer>(); // key: "<runId>-original" | "<runId>-poisoned" | "<runId>-cleaned"
+
+/** No-op on serverless — kept for API compatibility */
 export async function ensureDataDirs(): Promise<void> {
-  await fs.mkdir(RUNS_DIR, { recursive: true });
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
+  // no-op
 }
 
 export function hashBytes(bytes: Uint8Array | Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function runPath(id: string): string {
-  return path.join(RUNS_DIR, `${id}.json`);
+// ---------------------------------------------------------------------------
+// PDF buffer helpers (replaces fs.writeFile / fs.readFile on disk)
+// ---------------------------------------------------------------------------
+
+export function storePdf(key: string, bytes: Buffer | Uint8Array): void {
+  pdfStore.set(key, Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes));
 }
+
+export function loadPdf(key: string): Buffer | undefined {
+  return pdfStore.get(key);
+}
+
+export function pdfKeyOriginal(runId: string): string {
+  return `${runId}-original`;
+}
+
+export function pdfKeyPoisoned(runId: string): string {
+  return `${runId}-poisoned`;
+}
+
+export function pdfKeyCleaned(runId: string): string {
+  return `${runId}-cleaned`;
+}
+
+// ---------------------------------------------------------------------------
+// Run CRUD
+// ---------------------------------------------------------------------------
 
 export async function createRun(
   partial: Omit<RunRecord, "id" | "createdAt" | "updatedAt" | "timeline"> & {
@@ -64,31 +89,32 @@ export async function createRun(
     updatedAt: now,
     timeline: partial.timeline ?? [{ at: now, event: "run_created" }],
   };
-  await fs.writeFile(runPath(id), JSON.stringify(record, null, 2), "utf8");
+  runStore.set(id, record);
   return record;
 }
 
 export async function getRun(id: string): Promise<RunRecord | null> {
-  try {
-    const raw = await fs.readFile(runPath(id), "utf8");
-    return JSON.parse(raw) as RunRecord;
-  } catch {
-    return null;
-  }
+  return runStore.get(id) ?? null;
 }
 
 export async function updateRun(
   id: string,
   mutator: (run: RunRecord) => void | Promise<void>,
 ): Promise<RunRecord> {
-  const run = await getRun(id);
+  const run = runStore.get(id);
   if (!run) throw new Error(`Run not found: ${id}`);
   await mutator(run);
   run.updatedAt = new Date().toISOString();
-  await fs.writeFile(runPath(id), JSON.stringify(run, null, 2), "utf8");
+  runStore.set(id, run);
   return run;
 }
 
 export function pushEvent(run: RunRecord, event: string, detail?: unknown): void {
   run.timeline.push({ at: new Date().toISOString(), event, detail });
 }
+
+// Legacy path constants — kept as empty strings so existing code that
+// reads run.originalPdfPath / run.poisonedPdfPath doesn't break at compile time.
+export const DATA_DIR = "";
+export const RUNS_DIR = "";
+export const UPLOADS_DIR = "";

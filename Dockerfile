@@ -5,5 +5,6 @@ COPY server/package.json server/
 COPY client/package.json client/
 RUN npm install
 COPY . .
+RUN npm run build
 EXPOSE 3010
-CMD ["npm", "run", "dev", "-w", "server"]
+CMD ["node", "server/dist/index.js"]

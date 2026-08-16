@@ -2,6 +2,7 @@ import {
   GoogleGenerativeAI,
   SchemaType,
   type FunctionDeclaration,
+  type Schema,
 } from "@google/generative-ai";
 import { SECURE_SYSTEM_PROMPT, TOOL_DECLARATIONS } from "./prompts.js";
 import { evaluateToolPolicy } from "../defense/policy.js";
@@ -17,9 +18,9 @@ function toolDeclarations(): FunctionDeclaration[] {
       properties: Object.fromEntries(
         Object.entries(t.parameters.properties).map(([k, v]) => [
           k,
-          { type: v.type === "NUMBER" ? SchemaType.NUMBER : SchemaType.STRING, description: v.description },
+          { type: v.type === "NUMBER" ? SchemaType.NUMBER : SchemaType.STRING, description: v.description } as Schema,
         ]),
-      ),
+      ) as Record<string, Schema>,
       required: [...t.parameters.required],
     },
   }));
