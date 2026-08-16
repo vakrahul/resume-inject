@@ -5,14 +5,14 @@ import { redRouter } from "./routes/red.js";
 import { blueRouter } from "./routes/blue.js";
 import { catalogRouter } from "./routes/catalog.js";
 import { runsRouter } from "./routes/runs.js";
-import { ensureDataDirs, loadPdf } from "./store/runs.js";
+import { loadPdf } from "./store/runs.js";
 
 dotenv.config();
 
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "*";
 
-await ensureDataDirs();
-
+// Build the Express app synchronously — no top-level await
+// (ensureDataDirs is a no-op in the in-memory store)
 export const app = express();
 
 app.use(
@@ -37,10 +37,9 @@ app.use("/api/blue", blueRouter);
 app.use("/api/catalog", catalogRouter);
 app.use("/api/runs", runsRouter);
 
-// Serve PDFs from in-memory store (replaces static file server)
+// Serve PDFs from in-memory store (replaces static file server on disk)
 app.get("/api/files/:filename", (req, res) => {
-  const filename = req.params.filename; // e.g. "<runId>-poisoned.pdf"
-  // strip the .pdf extension and use the full stem as the store key
+  const filename = req.params.filename;
   const key = filename.replace(/\.pdf$/, "");
   const buf = loadPdf(key);
   if (!buf) {
