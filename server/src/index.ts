@@ -15,6 +15,43 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "*";
 // (ensureDataDirs is a no-op in the in-memory store)
 export const app = express();
 
+// Basic rate limiter middleware to prevent abuse
+const requestCounts = new Map<string, { count: number, resetTime: number }>();
+const RATE_LIMIT_WINDOW_MS = 60000;
+const MAX_REQUESTS_PER_WINDOW = 100;
+
+app.use((req, res, next) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  
+  if (!requestCounts.has(ip)) {
+    requestCounts.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+  } else {
+    const data = requestCounts.get(ip)!;
+    if (now > data.resetTime) {
+      data.count = 1;
+      data.resetTime = now + RATE_LIMIT_WINDOW_MS;
+    } else {
+      data.count++;
+      if (data.count > MAX_REQUESTS_PER_WINDOW) {
+        res.status(429).json({ error: "Too many requests, please try again later." });
+        return;
+      }
+    }
+  }
+  next();
+});
+
+// Logging middleware to track API usage and performance
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[API] ${req.method} ${req.originalUrl} - ${res.statusCode} [${duration}ms]`);
+  });
+  next();
+});
+
 app.use(
   cors({
     origin: CLIENT_ORIGIN === "*" ? true : CLIENT_ORIGIN,
