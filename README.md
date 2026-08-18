@@ -17,7 +17,7 @@ Educational **Red / Blue** lab: poison a resume with invisible prompt injections
 ## Quick start
 
 ```bash
-cd C:\Users\RAHUL\indo\=bh
+cd c:\Users\RAHUL\wss\resume-inject
 # ensure .env has GEMINI_API_KEY, SMTP_*, ADMIN_ALERT_EMAIL, EMAIL_DOMAIN_WHITELIST
 npm install
 npm run dev
