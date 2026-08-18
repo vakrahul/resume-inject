@@ -59,7 +59,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Gemini Code Review
+
         uses: google-github-actions/gemini-pr-reviewer@v1
+
+        uses: google-github-actions/gemini-pr-reviewer@v1 # Replace with your preferred Gemini action if different
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
