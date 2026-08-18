@@ -48,3 +48,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx tsc -p client --noEmit
+
+  gemini-reviewer:
+    name: Gemini PR Reviewer
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gemini Code Review
+        uses: google-github-actions/gemini-pr-reviewer@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
